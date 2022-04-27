@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib import animation
 import numpy as np
 import numpy.fft as npfft
+from scipy import interpolate
 
 def calc_ispec(kk, ll, wv, _var_dens, averaging = True, truncate=True, nd_wavenumber=False, nfactor = 1):
     """Compute isotropic spectrum `phr` from 2D spectrum of variable signal2d.
@@ -281,6 +282,175 @@ class dataset_experiments:
             plt.title('Kinetic Energy, lower layer') 
         plt.tight_layout()
 
+    def plot_KE_sensitivity(self, pct, exps1, exps0, tstart=1825., fitting=False, exps2=[], param=[1,1]):
+        fig = plt.figure(figsize=(13,5))
+        plt.rcParams.update({'font.size': 18})
+        KE_mean = np.zeros((len(pct),2))
+        tmp0=np.zeros([len(exps1[1]),len(exps1)])
+        tmp1=np.zeros([len(exps1[1]),len(exps1)])
+        j = 0
+        for exps_grp in exps1:
+            i = 0
+            for exp in exps_grp:
+                series = self[exp].series
+                t = series.Time
+                KE = series.KE.isel(Layer=0) / series.Mass
+                tmp0[i,j] = KE[t >= tstart].mean()
+                # KE_mean[i,0] += KE[t >= tstart].mean()
+                
+                series = self[exp].series
+                t = series.Time
+                KE = series.KE.isel(Layer=1) / series.Mass
+                tmp1[i,j] = KE[t >= tstart].mean()
+                # KE_mean[i,1] += KE[t >= tstart].mean()
+                i += 1
+            j += 1
+        KE_mean = np.zeros([len(pct),2])
+        KE_std = np.zeros([len(pct),2])
+        KE_mean[:,0] = np.mean(tmp0,axis=0)
+        KE_mean[:,1] = np.mean(tmp1,axis=0)
+        KE_std[:,0] = np.std(tmp0,axis=0)
+        KE_std[:,1] = np.std(tmp1,axis=0)
+        # KE_mean = KE_mean/len(pct)
+        
+        i = 0; KE_mean0 = 0; KE_mean1 = 0
+        for exp in exps0:
+            series = self[exp].series
+            t = series.Time
+            KE = series.KE.isel(Layer=0) / series.Mass
+            KE_mean0 = KE[t >= tstart].mean()
+            plt.subplot(121)
+            if i==0:
+                p = plt.plot(i, KE_mean0, 'o', color='b', label=self.names[exp])
+            elif i==1:
+                p = plt.plot(i, KE_mean0, 'o', color='r', label=self.names[exp])
+            
+            series = self[exp].series
+            t = series.Time
+            KE = series.KE.isel(Layer=1) / series.Mass
+            KE_mean1 = KE[t >= tstart].mean()
+            plt.subplot(122)
+            if i==0:
+                p = plt.plot(i, KE_mean1, 'o', color='b', label=self.names[exp])
+            elif i==1:
+                p = plt.plot(i, KE_mean1, 'o', color='r', label=self.names[exp])
+            i += 1
+
+        plt.subplot(121)
+        # p = plt.plot(pct, KE_mean[:,0], '-o', label='R4_GZ')
+        p = plt.errorbar(pct, KE_mean[:,0], KE_std[:,0], fmt='-o', capsize=3, label='R4_GZ')
+        plt.xlabel('Attenuation of parameterization')
+        plt.ylabel('$m^2/s^2$')
+        plt.title('Kinetic Energy, upper layer')   
+        plt.legend()
+        plt.subplot(122)
+        p = plt.errorbar(pct, KE_mean[:,1], KE_std[:,1], fmt='-o', capsize=3, label='R4_GZ')
+        plt.xlabel('Attenuation of parameterization')
+        plt.ylabel('$m^2/s^2$')
+        plt.title('Kinetic Energy, lower layer') 
+
+        if fitting==True:
+            KE_mean2 = np.zeros(2)
+            for exp in exps2:
+                series = self[exp].series
+                t = series.Time
+                KE = series.KE.isel(Layer=0) / series.Mass
+                KE_mean2[0] += KE[t >= tstart].mean()
+                
+                series = self[exp].series
+                t = series.Time
+                KE = series.KE.isel(Layer=1) / series.Mass
+                KE_mean2[1] += KE[t >= tstart].mean()
+            KE_mean2 = KE_mean2/len(pct)
+            plt.subplot(121)
+            p = plt.plot(param[0], KE_mean2[0], 'x', color='r', label='Fitting')
+            plt.legend()
+            plt.subplot(122)
+            p = plt.plot(param[1], KE_mean2[1], 'x', color='r', label='Fitting')
+
+        plt.tight_layout()
+
+    def plot_KE_sensitivity_2D(self, pct_u, pct_l, exps1, exps0, tstart=1825., fitting=False, exps2=[], param=[1,1]):
+        fig = plt.figure(figsize=(13,5))
+        plt.rcParams.update({'font.size': 18})
+
+        series = self[exps0[1]].series
+        t = series.Time
+        KE = series.KE.isel(Layer=0) / series.Mass
+        KE_mean_0 = KE[t >= tstart].mean()
+        KE = series.KE.isel(Layer=1) / series.Mass
+        KE_mean_1 = KE[t >= tstart].mean()
+
+        tmp0=np.zeros([len(exps1[1]),len(exps1)])
+        tmp1=np.zeros([len(exps1[1]),len(exps1)])
+        j = 0
+        for exps_grp in exps1:
+            i = 0
+            for exp in exps_grp:
+                series = self[exp].series
+                t = series.Time
+                KE = series.KE.isel(Layer=0) / series.Mass
+                tmp0[i,j] = KE[t >= tstart].mean()
+                
+                series = self[exp].series
+                t = series.Time
+                KE = series.KE.isel(Layer=1) / series.Mass
+                tmp1[i,j] = KE[t >= tstart].mean()
+                i += 1
+            j += 1
+        KE_mean0 = np.mean(tmp0,axis=0) - KE_mean_0.values
+        KE_mean1 = np.mean(tmp1,axis=0) - KE_mean_1.values
+        KE_std0 = np.std(tmp0,axis=0)
+        KE_std1 = np.std(tmp1,axis=0)
+        KE_mean0 = np.array(KE_mean0).reshape(len(pct_l),len(pct_u)); KE_mean0 = np.transpose(KE_mean0)
+        KE_mean1 = np.array(KE_mean1).reshape(len(pct_l),len(pct_u)); KE_mean1 = np.transpose(KE_mean1)
+        KE_std0 = np.array(KE_std0).reshape(len(pct_l),len(pct_u)); KE_std0 = np.transpose(KE_std0)
+        KE_std1 = np.array(KE_std1).reshape(len(pct_l),len(pct_u)); KE_std1 = np.transpose(KE_std1)
+
+        #interpolate to finer grid
+        xh = np.arange(pct_u[0],pct_u[-1]+(pct_u[1]-pct_u[0])/1000,(pct_u[1]-pct_u[0])/1000)
+        yh = np.arange(pct_l[0],pct_l[-1]+(pct_l[1]-pct_l[0])/1000,(pct_l[1]-pct_l[0])/1000)
+        f0 = interpolate.interp2d(pct_u, pct_l, KE_mean0, kind='cubic')
+        f1 = interpolate.interp2d(pct_u, pct_l, KE_mean1, kind='cubic')
+        LS2 = np.square(f0(xh,yh))+np.square(f1(xh,yh))
+        ind = np.unravel_index(np.argmin(LS2, axis=None), LS2.shape)
+        print('Fitting location:',xh[ind[1]],yh[ind[0]])
+
+        plt.subplot(121)
+        X, Y = np.meshgrid(xh,yh)
+        ax1 = plt.gca()
+        p = ax1.imshow(f0(xh,yh), origin='lower',
+            extent=[xh.min(),xh.max(),yh.min(),yh.max()], 
+            cmap='bwr',vmin=-0.0005, vmax = 0.0005,aspect="auto")
+        plt.plot(xh[ind[1]],yh[ind[0]], 'x', color='k')
+        asp = np.diff(ax1.get_xlim())[0] / np.diff(ax1.get_ylim())[0]
+        ax1.set_aspect(asp)
+        fig.colorbar(p, ax=ax1, label='$m^2/s^2$')
+        # plt.xticks((0, 5, 10, 15, 20))
+        # plt.yticks((30, 35, 40, 45, 50))
+        plt.xlabel('Attenu. for upper layer')
+        plt.ylabel('Attenu. for lower layer')
+        plt.title('Sensitivity: upper layer')
+
+        plt.subplot(122)
+        ax2 = plt.gca()
+        p = ax2.imshow(f1(xh,yh), origin='lower',
+            extent=[xh.min(),xh.max(),yh.min(),yh.max()], 
+            cmap='bwr',vmin=-0.0005, vmax = 0.0005,aspect="auto")
+        plt.plot(xh[ind[1]],yh[ind[0]], 'x', color='k')
+        asp = np.diff(ax2.get_xlim())[0] / np.diff(ax2.get_ylim())[0]
+        ax2.set_aspect(asp)
+        fig.colorbar(p, ax=ax2, label='$m^2/s^2$')
+        # plt.xticks((0, 5, 10, 15, 20))
+        # plt.yticks((30, 35, 40, 45, 50))
+        plt.xlabel('Attenu. for upper layer')
+        plt.title('Sensitivity: lower layer')
+
+        if fitting==True:
+            pass
+
+        plt.tight_layout()
+
     def plot_ssh(self, exps, tstart=0.):
         nfig = len(exps)
         plt.rcParams.update({'font.size': 16})
@@ -323,7 +493,7 @@ class dataset_experiments:
         for i, exp in enumerate(exps):
             ave = self[exp].ave
             t = ave.Time
-            ssh = ssh + ave.e.isel(zi=0)[t >= tstart].mean(dim='Time')
+            ssh += ave.e.isel(zi=0)[t >= tstart].mean(dim='Time')
         ssh = ssh/n
         plt.subplot(131)
         xh = ave.xh
@@ -376,6 +546,105 @@ class dataset_experiments:
         plt.yticks((30, 35, 40, 45, 50))
         plt.xlabel('Longitude')
         plt.title('ensemble averaged: std')
+
+        plt.tight_layout()
+
+    def plot_ssh_error_map(self, exps, exps0, tstart=0.):
+        n = len(exps)
+        fig = plt.figure(figsize=(15,10))
+        plt.rcParams.update({'font.size': 16})
+
+        plt.subplot(231)
+        ave = self[exps0[1]].ave
+        t = ave.Time
+        ssh0 = ave.e.isel(zi=0)[t >= tstart].mean(dim='Time')
+        xh = ave.xh
+        yh = ave.yh
+        X, Y = np.meshgrid(xh,yh)
+        ax = plt.gca()
+        Cplot = plt.contour(X,Y,ssh0, levels=np.arange(-4,4,0.5), colors='k', linewidths=1)
+        ax.clabel(Cplot, Cplot.levels)
+        plt.xticks((0, 5, 10, 15, 20))
+        plt.yticks((30, 35, 40, 45, 50))
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
+        plt.title(self.names[exps0[1]])
+
+        plt.subplot(232)
+        ave = self[exps0[0]].ave
+        t = ave.Time
+        ssh1 = ave.e.isel(zi=0)[t >= tstart].mean(dim='Time')
+        xh = ave.xh
+        yh = ave.yh
+        X, Y = np.meshgrid(xh,yh)
+        ax = plt.gca()
+        Cplot = plt.contour(X,Y,ssh1, levels=np.arange(-4,4,0.5), colors='k', linewidths=1)
+        ax.clabel(Cplot, Cplot.levels)
+        plt.xticks((0, 5, 10, 15, 20))
+        plt.yticks((30, 35, 40, 45, 50))
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
+        plt.title(self.names[exps0[0]])
+
+        plt.subplot(233)
+        xh = ave.xh
+        yh = ave.yh
+        X, Y = np.meshgrid(xh,yh)
+        ax2 = plt.gca()
+        ssh_err=ssh1
+        intv=int(len(ssh0)/len(ssh_err))
+        ssh_err.values=ssh0[int(intv/2-1):-1:intv,int(intv/2-1):-1:intv]-ssh_err.values
+        # err_max=max(abs(ssh_err.values.min()),abs(ssh_err.values.max()))
+        p = ax2.imshow(ssh_err, origin='lower',
+            extent=[xh.min(),xh.max(),yh.min(),yh.max()], 
+            cmap='bwr', vmin=-2, vmax = 2,aspect="auto")
+        asp = np.diff(ax2.get_xlim())[0] / np.diff(ax2.get_ylim())[0]
+        ax2.set_aspect(asp)
+        fig.colorbar(p, ax=ax2, label='meter units')
+        plt.xticks((0, 5, 10, 15, 20))
+        plt.yticks((30, 35, 40, 45, 50))
+        plt.xlabel('Longitude')
+        plt.title('Error map: ssh')
+
+        ssh=0
+        for i, exp in enumerate(exps):
+            ave = self[exp].ave
+            t = ave.Time
+            ssh += ave.e.isel(zi=0)[t >= tstart].mean(dim='Time')
+        ssh = ssh/n
+        plt.subplot(235)
+        xh = ave.xh
+        yh = ave.yh
+        X, Y = np.meshgrid(xh,yh)
+        ax1 = plt.gca()
+        Cplot = plt.contour(X,Y,ssh, levels=np.arange(-4,4,0.5), colors='k', linewidths=1)
+        ax1.clabel(Cplot, Cplot.levels)
+        ax1.set_aspect('equal')
+        plt.xticks((0, 5, 10, 15, 20))
+        plt.yticks((30, 35, 40, 45, 50))
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
+        plt.title('R4_GZ: ensemble averaged')
+
+        plt.subplot(236)
+        xh = ave.xh
+        yh = ave.yh
+        X, Y = np.meshgrid(xh,yh)
+        ax2 = plt.gca()
+        ssh_err=ssh
+        intv=int(len(ssh0)/len(ssh_err))
+        ssh_err.values=ssh0[int(intv/2-1):-1:intv,int(intv/2-1):-1:intv]-ssh_err.values
+        # err_max=max(abs(ssh_err.values.min()),abs(ssh_err.values.max()))
+        p = ax2.imshow(ssh_err, origin='lower',
+            extent=[xh.min(),xh.max(),yh.min(),yh.max()], 
+            cmap='bwr', vmin=-2, vmax = 2,aspect="auto")
+        asp = np.diff(ax1.get_xlim())[0] / np.diff(ax1.get_ylim())[0]
+        ax2.set_aspect(asp)
+        fig.colorbar(p, ax=ax2, label='meter units')
+        plt.xticks((0, 5, 10, 15, 20))
+        plt.yticks((30, 35, 40, 45, 50))
+        plt.xlabel('Longitude')
+        plt.title('Error map: ssh')
 
         plt.tight_layout()
 
@@ -448,8 +717,11 @@ class dataset_experiments:
             frames.append([globals()['p'+str(ifig)] for ifig in range(nfig)])
         ani = animation.ArtistAnimation(fig, frames, interval=500, blit=True,
                                 repeat_delay=1000)
-        plt.show()
-        ani.save('vorticity_animation.mp4')
+        # plt.show()
+        # plt.tight_layout()
+        video_name = 'vorti_anim_'+self.common_folder.split('/')[-1]+'.mp4'
+        ani.save(video_name)
+        return video_name
 
     def plot_KE_snapshot(self, exps, Time=-1, zl=0):
         nfig = len(exps)
@@ -713,8 +985,8 @@ class dataset_experiments:
             fx = np.array(mom.diffu[t >= tstart])
             fy = np.array(mom.diffv[t >= tstart])
             h = np.array(prog.h[t >= tstart])
-            ZBx = np.array(mom.ZB2020u[t >= tstart])
-            ZBy = np.array(mom.ZB2020v[t >= tstart])
+            ZBx = np.array(mom.CNNu[t >= tstart])
+            ZBy = np.array(mom.CNNv[t >= tstart])
 
             uh = 0.5 * (u[:,:,:,1:] + u[:,:,:,0:-1])
             vh = 0.5 * (v[:,:,1:,:] + v[:,:,0:-1,:])
@@ -728,7 +1000,7 @@ class dataset_experiments:
             k, EZB = compute_cospectrum_uv(uh[:,0,:,:], vh[:,0,:,:], ZBxh[:,0,:,:], ZByh[:,0,:,:], **kw)
             Esmag = E - EZB
             plt.semilogx(k,E*k, label='sum')
-            plt.semilogx(k,EZB*k, '--', label='ZB2020')
+            plt.semilogx(k,EZB*k, '--', label='CNN')
             plt.semilogx(k,Esmag*k, '-.', label='Smag')
             plt.axhline(y=0,color='k', linestyle='--', alpha=0.5)
             plt.xlabel('$k$, wavenumber')
@@ -742,7 +1014,7 @@ class dataset_experiments:
             k, EZB = compute_cospectrum_uv(uh[:,1,:,:], vh[:,1,:,:], ZBxh[:,1,:,:], ZByh[:,1,:,:], **kw)
             Esmag = E - EZB
             plt.semilogx(k,E*k, label='sum')
-            plt.semilogx(k,EZB*k, '--', label='ZB2020')
+            plt.semilogx(k,EZB*k, '--', label='CNN')
             plt.semilogx(k,Esmag*k, '-.', label='Smag')
             plt.axhline(y=0,color='k', linestyle='--', alpha=0.5)
             plt.xlabel('$k$, wavenumber')
@@ -760,8 +1032,8 @@ class dataset_experiments:
         mom = self[exp].mom
         fx = mom.diffu.isel(Time=Time)
         fy = mom.diffv.isel(Time=Time)
-        ZBx = mom.ZB2020u.isel(Time=Time)
-        ZBy = mom.ZB2020v.isel(Time=Time)
+        ZBx = mom.CNNu.isel(Time=Time)
+        ZBy = mom.CNNv.isel(Time=Time)
         smagx = fx - ZBx
         smagy = fy - ZBy
 
@@ -780,13 +1052,13 @@ class dataset_experiments:
 
         plt.subplot(243)
         plt.imshow(ZBx.isel(zl=0), origin='lower', cmap='bwr')
-        plt.title('ZB2020u')
+        plt.title('CNNu')
         plt.colorbar()
         plt.clim(-1e-7, 1e-7)
 
         plt.subplot(244)
         plt.imshow(ZBy.isel(zl=0), origin='lower', cmap='bwr')
-        plt.title('ZB2020v')
+        plt.title('CNNv')
         plt.colorbar()
         plt.clim(-1e-7, 1e-7)
 
@@ -805,13 +1077,13 @@ class dataset_experiments:
 
         plt.subplot(247)
         plt.imshow(ZBx.isel(zl=1), origin='lower', cmap='bwr')
-        plt.title('ZB2020u')
+        plt.title('CNNu')
         plt.colorbar()
         plt.clim(-1e-7, 1e-7)
 
         plt.subplot(248)
         plt.imshow(ZBy.isel(zl=1), origin='lower', cmap='bwr')
-        plt.title('ZB2020v')
+        plt.title('CNNv')
         plt.colorbar()
         plt.clim(-1e-7, 1e-7)
 
@@ -838,7 +1110,7 @@ class dataset_experiments:
             time = energy.Time
 
             dKE = np.array(energy.KE_horvisc)
-            dKE_ZB = np.array(energy.KE_ZB2020)
+            dKE_ZB = np.array(energy.KE_CNN)
             dKE_horvisc = dKE - dKE_ZB
 
             Nt, Nz = dKE.shape[0], dKE.shape[1]
